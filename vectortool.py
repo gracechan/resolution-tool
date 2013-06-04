@@ -3,8 +3,6 @@ import wx.lib.wxcairo
 import cairo
 import math
 
-# let rank = 0 and proportion = 0 essentially mean that the values are undefined
-
 class BufferedCanvas(wx.Panel):
     buffer = None
     backbuffer = None
@@ -54,6 +52,7 @@ class BufferedCanvas(wx.Panel):
         # update the screen
         self.update()
 
+# let rank = 0 and proportion = 0 essentially mean that the values are undefined
 class TreeNode:
     def __init__(self, name, shape, rank=0, proportion=0):
         self.name = name
@@ -124,35 +123,14 @@ class MyFrame(wx.Frame):
         
 class LayerListBox:
     def __init__(self, x, y, w, h):
-        self.layerListX = 360
-        self.layerListY = 100
-        self.layerListItemW = 250
-        self.layerListItemH = 30
+        self.lstX = x
+        self.lstY = y
+        self.lstW = w
+        self.lstH = h
         self.orderedLayers = []
         self.selectedLayer = None
         
-class CairoPanel(BufferedCanvas):
-    def __init__(self, parent, nodes):
-        #wx.Panel.__init__(self, parent, style=wx.BORDER_SIMPLE)
-        #self.Bind(wx.EVT_PAINT, self.OnPaint)
-        self.text = 'Hello World!'
-        self.nodes = nodes
-        self.mouseX = 0;
-        self.mouseY = 0;
-        self.selectedLayer = None
-        self.orderedLayers = []
-        self.layerListX = 360;
-        self.layerListY = 100;
-        self.layerListItemW = 250;
-        self.layerListItemH = 30;
-        
-        self.reorderLayersFromTree();
-        
-        BufferedCanvas.__init__(self, parent, -1)
-        self.Bind(wx.EVT_MOTION, self.getCoords)
-        
-    def reorderLayersFromTree(self):
-        root = self.nodes[0]
+    def reorderLayersFromTreeRoot(self, root):
         childStack = [root]
         levelStack = [1]
         ycounter = 0;
@@ -167,11 +145,87 @@ class CairoPanel(BufferedCanvas):
             levelStack = [currentLevel + 1] * len(currentNode.children) + levelStack
             
             self.orderedLayers += [currentNode]
+            
+    def paint(self, cr, mouseX, mouseY):
+        cr.set_line_width(0.04)
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(0.04)
+        
+        ycounter = 0;
+        drawLayers = self.orderedLayers
+        
+        lstBoxX = self.lstX
+        lstBoxY = self.lstY - self.lstH
+        lstBoxW = self.lstW
+        lstBoxH = self.lstH * len(drawLayers)
+        
+        while drawLayers != []:
+            currentNode = drawLayers[0]
+            drawLayers = drawLayers[1:]
+            
+            levelColor = (currentNode.level - 1) * 0.1
+            
+            rectX = self.lstX + (currentNode.level - 1) * 15
+            rectY = self.lstY + ycounter - self.lstH
+            rectW = self.lstW - (currentNode.level - 1) * 15
+            rectH = self.lstH - 2
+            
+            cr.rectangle(lstBoxX, rectY, self.lstW, self.lstH - 2)
+            cr.set_source_rgb(1, 1, 1)
+            cr.fill()
+            
+            cr.rectangle(rectX, rectY, rectW, rectH)
+            
+            # hovering over layer list item
+            if (mouseX >= rectX and mouseX <= rectX + rectW and
+                mouseY >= rectY and mouseY <= rectY + rectH):
+                cr.set_source_rgb(1,0,0);
+                if (self.selectedLayer != None):
+                    self.selectedLayer.selectedShape = False
+                self.selectedLayer = currentNode.shapeLayer
+                self.selectedLayer.selectedShape = True
+
+            # not hovering over anything in the box
+            elif (mouseX < lstBoxX or mouseX > lstBoxX + lstBoxW or
+                  mouseY < lstBoxY or mouseY > lstBoxY + lstBoxH):
+                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
+                if (self.selectedLayer != None):
+                    self.selectedLayer.selectedShape = False
+                self.selectedLayer = None
+
+            # hovering over another layer list item
+            else:
+                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
+
+            cr.fill()
+            
+            # layer text
+            cr.set_source_rgb(1,1,1)
+            cr.move_to(self.lstX + 30 + (currentNode.level - 1) * 15, self.lstY + ycounter - 10)
+            cr.show_text(currentNode.name)
+            cr.stroke()
+            cr.move_to(self.lstX + self.lstW - 30, self.lstY + ycounter - 10)
+            cr.show_text(str(currentNode.rank))
+            cr.stroke()
+            ycounter += self.lstH
+        
+class CairoPanel(BufferedCanvas):
+    def __init__(self, parent, nodes):
+        self.text = 'Hello World!'
+        self.nodes = nodes
+        self.layerList = LayerListBox(360, 100, 250, 30)
+        self.mouseX = 0;
+        self.mouseY = 0;
+        
+        if (len(self.nodes) > 1):
+            self.layerList.reorderLayersFromTreeRoot(self.nodes[0])
+        
+        BufferedCanvas.__init__(self, parent, -1)
+        self.Bind(wx.EVT_MOTION, self.getCoords)
         
     def getCoords(self, evt):
         self.mouseX = evt.GetX()
-        self.mouseY = evt.GetY()
-        
+        self.mouseY = evt.GetY()        
         self.update()
         
     def draw(self, dc):
@@ -180,73 +234,19 @@ class CairoPanel(BufferedCanvas):
         
         size = min(width, height)
         
+        # black background
         cr.rectangle(0, 0, width, height)
         cr.set_source_rgb(0, 0, 0)
         cr.fill()
         
+        # draw the shape layers
         for node in self.nodes:
             node.shapeLayer.paint(cr)
         
-        cr.set_line_width(0.04)
-        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(0.04)
-        
-        ycounter = 0;
-        drawLayers = self.orderedLayers
-        
-        lstBoxX = self.layerListX
-        lstBoxY = self.layerListY - self.layerListItemH
-        lstBoxW = self.layerListItemW
-        lstBoxH = self.layerListItemH * len(drawLayers)
-        
-        while drawLayers != []:
-            currentNode = drawLayers[0]
-            drawLayers = drawLayers[1:]
+        # draw the layer list box
+        self.layerList.paint(cr, self.mouseX, self.mouseY)
             
-            levelColor = (currentNode.level - 1) * 0.1
-            
-            rectX = self.layerListX + (currentNode.level - 1) * 15
-            rectY = self.layerListY + ycounter - self.layerListItemH
-            rectW = self.layerListItemW - (currentNode.level - 1) * 15
-            rectH = self.layerListItemH - 2
-            
-            cr.rectangle(lstBoxX, rectY, self.layerListItemW, self.layerListItemH - 2)
-            cr.set_source_rgb(1, 1, 1)
-            cr.fill()
-            
-            cr.rectangle(rectX, rectY, rectW, rectH)
-            
-            # hovering over layer list item
-            if (self.mouseX >= rectX and self.mouseX <= rectX + rectW and
-                self.mouseY >= rectY and self.mouseY <= rectY + rectH):
-                cr.set_source_rgb(1,0,0);
-                oldSelectedLayer = self.selectedLayer
-                self.selectedLayer = currentNode.shapeLayer
-                if (oldSelectedLayer != None):
-                    oldSelectedLayer.selectedShape = False
-                self.selectedLayer.selectedShape = True
-            # not hovering over anything in the box
-            elif (self.mouseX < lstBoxX or self.mouseX > lstBoxX + lstBoxW or
-                  self.mouseY < lstBoxY or self.mouseY > lstBoxY + lstBoxH):
-                if (self.selectedLayer != None):
-                    self.selectedLayer.selectedShape = False
-                self.selectedLayer = None
-                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
-            # hovering over another layer list item
-            else:
-                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
-            cr.fill()
-            
-            # layer text
-            cr.set_source_rgb(1,1,1)
-            cr.move_to(self.layerListX + 30 + (currentNode.level - 1) * 15, self.layerListY + ycounter - 10)
-            cr.show_text(currentNode.name)
-            cr.stroke()
-            cr.move_to(self.layerListX + self.layerListItemW - 30, self.layerListY + ycounter - 10)
-            cr.show_text(str(currentNode.rank))
-            cr.stroke()
-            ycounter += self.layerListItemH
-            
+        # show the mouse coordinates
         cr.set_source_rgb(1,1,1)
         cr.set_line_width(0.04)
         cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
@@ -260,6 +260,7 @@ class CairoPanel(BufferedCanvas):
         self.Refresh()
         
 
+# START MAIN SCRIPT
 face = TreeNode("face", Rectangle(100, 100, 200, 200, (0.8, 0.2, 0.2)), 10)
 leftEyeWhite = TreeNode("left eye white", Rectangle(120, 120, 40, 60, (1, 1, 1)), 5)
 leftPupil = TreeNode("left pupil", Rectangle(130, 140, 20, 20, (0, 0, 0)), 8)
@@ -272,43 +273,15 @@ face.addChild(rightEyeWhite)
 face.addChild(nose)
 leftEyeWhite.addChild(leftPupil)
 rightEyeWhite.addChild(rightPupil)
-
-#print "BREADTH FIRST SEARCH"
-#root = face
-#childQueue = [root]
-
-#while childQueue != []:
-    #currentNode = childQueue[0]
-    #childQueue = childQueue[1:]
-    #childQueue += currentNode.children
-    #print currentNode.name
-
-#print "DEPTH FIRST SEARCH"
-#childStack = [root]
-#levelStack = [1]
-
-#while childStack != []:
-    #currentNode = childStack[0]
-    #childStack = childStack[1:]
-    #childStack = currentNode.children + childStack
-    
-    #currentLevel = levelStack[0]
-    #levelStack = levelStack[1:]
-    #levelStack = [currentLevel + 1] * len(currentNode.children) + levelStack
-        
-    #print currentNode.name, currentLevel
     
 nodes = [face,
-          leftEyeWhite,
-          leftPupil,
-          nose,
-          rightEyeWhite,
-          rightPupil]
+         leftEyeWhite,
+         leftPupil,
+         nose,
+         rightEyeWhite,
+         rightPupil]
 
 #app = wx.App(False)
-#theFrame = MyFrame(None, 'Resolution Tool', nodes)
-#app.MainLoop()
-
 app = wx.PySimpleApp()
 frame = MyFrame(None, 'Resolution Tool', nodes)
 frame.Show(True)
