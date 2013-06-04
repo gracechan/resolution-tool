@@ -60,40 +60,55 @@ class TreeNode:
         self.shapeLayer = shape
         self.parent = None
         self.children = []
-        self.rank = rank;
-        self.proportion = proportion;
+        self.level = 1
+        self.rank = rank
+        self.proportion = proportion
         
     def addChild(self, node):
         self.children += [node]
         node.assignParent(self)
+        node.level = self.level + 1
         
     def assignParent(self, node):
         self.parent = node
 
-class Rectangle:
-    def __init__(self, x, y, width, height, rgb):
+class Shape:
+    def __init__(self, x, y, rgb):
         self.x = x;
         self.y = y;
+        self.rgb = rgb;
+        self.selectedShape = False;
+        
+    def paint(self, cpanel):
+        cpanel.set_source_rgb(1,0,0)
+        self.paintShape(cpanel)
+        
+        if (self.selectedShape):
+            cpanel.set_line_width(10)
+            cpanel.stroke_preserve();
+            
+        cpanel.set_source_rgb(self.rgb[0], self.rgb[1], self.rgb[2])
+        cpanel.fill()
+        
+    def paintShape(self, cpanel):
+        pass
+        
+class Rectangle(Shape):
+    def __init__(self, x, y, width, height, rgb):
         self.width = width;
         self.height = height;
-        self.rgb = rgb;
+        Shape.__init__(self, x, y, rgb);
         
-    def paint(self, cpanel):
-        cpanel.set_source_rgb(self.rgb[0], self.rgb[1], self.rgb[2])
+    def paintShape(self, cpanel):
         cpanel.rectangle(self.x, self.y, self.width, self.height)
-        cpanel.fill()
         
-class Circle:
+class Circle(Shape):
     def __init__(self, x, y, radius, rgb):
-        self.x = x;
-        self.y = y;
         self.radius = radius;
-        self.rgb = rgb;
+        Shape.__init__(self, x, y, rgb);
         
-    def paint(self, cpanel):
-        cpanel.set_source_rgb(self.rgb[0], self.rgb[1], self.rgb[2])
+    def paintShape(self, cpanel):
         cpanel.arc(self.x, self.y, self.radius, 0, 2 * math.pi);
-        cpanel.fill()
         
 class MyFrame(wx.Frame):
     def __init__(self, parent, title, nodes, ID=-1, pos=wx.DefaultPosition,
@@ -107,65 +122,41 @@ class MyFrame(wx.Frame):
         self.Show(False)
         self.Destroy()
         
+class LayerListBox:
+    def __init__(self, x, y, w, h):
+        self.layerListX = 360
+        self.layerListY = 100
+        self.layerListItemW = 250
+        self.layerListItemH = 30
+        self.orderedLayers = []
+        self.selectedLayer = None
+        
 class CairoPanel(BufferedCanvas):
     def __init__(self, parent, nodes):
         #wx.Panel.__init__(self, parent, style=wx.BORDER_SIMPLE)
         #self.Bind(wx.EVT_PAINT, self.OnPaint)
         self.text = 'Hello World!'
-        self.nodes = []
         self.nodes = nodes
         self.mouseX = 0;
+        self.mouseY = 0;
+        self.selectedLayer = None
+        self.orderedLayers = []
+        self.layerListX = 360;
+        self.layerListY = 100;
+        self.layerListItemW = 250;
+        self.layerListItemH = 30;
+        
+        self.reorderLayersFromTree();
         
         BufferedCanvas.__init__(self, parent, -1)
         self.Bind(wx.EVT_MOTION, self.getCoords)
         
-    def getCoords(self, evt):
-        self.mouseX = evt.GetX()
-        self.update()
-        
-    def draw(self, dc):
-        #dc.SetBackground(wx.Brush("Black"))
-        #dc.Clear()
-        #dc.SetBrush(wx.BLUE_BRUSH)
-        #dc.SetPen(wx.Pen('Red', 4))
-        #dc.DrawRectangle(20,20,300,200)
-        width, height = self.GetClientSize()
-        cr = wx.lib.wxcairo.ContextFromDC(dc)
-        
-        size = min(width, height)
-        #cr.scale(size, size)     # only include this if you want everything to shrink according to the window size
-        
-        cr.rectangle(0, 0, width, height)
-        cr.set_source_rgb(0, 0, 0)
-        cr.fill()
-        
-        cr.move_to(500, 20);
-        cr.line_to(573, 69);
-        cr.line_to(456, 44);
-        cr.close_path();
-        cr.set_source_rgb(0.5, 0.9, 0.8);
-        cr.fill();
-        
-        
-        #cr.set_source_rgb(1, 1, 1);
-        #cr.arc(450, 300, 50, 0, 2 * math.pi);
-        #cr.stroke_preserve();
-        #cr.set_source_rgb(0.6, 0.6, 0.9);
-        #cr.fill();
-        
-        for node in self.nodes:
-            node.shapeLayer.paint(cr)       
-
+    def reorderLayersFromTree(self):
         root = self.nodes[0]
         childStack = [root]
         levelStack = [1]
         ycounter = 0;
-    
         
-        cr.set_source_rgb(1,1,1)
-        cr.set_line_width(0.04)
-        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(0.04)
         while childStack != []:
             currentNode = childStack[0]
             childStack = childStack[1:]
@@ -174,20 +165,94 @@ class CairoPanel(BufferedCanvas):
             currentLevel = levelStack[0]
             levelStack = levelStack[1:]
             levelStack = [currentLevel + 1] * len(currentNode.children) + levelStack
-            cr.move_to(400, 100 + ycounter)
-            cr.show_text("--" * (currentLevel - 1) + currentNode.name)
+            
+            self.orderedLayers += [currentNode]
+        
+    def getCoords(self, evt):
+        self.mouseX = evt.GetX()
+        self.mouseY = evt.GetY()
+        
+        self.update()
+        
+    def draw(self, dc):
+        width, height = self.GetClientSize()
+        cr = wx.lib.wxcairo.ContextFromDC(dc)
+        
+        size = min(width, height)
+        
+        cr.rectangle(0, 0, width, height)
+        cr.set_source_rgb(0, 0, 0)
+        cr.fill()
+        
+        for node in self.nodes:
+            node.shapeLayer.paint(cr)
+        
+        cr.set_line_width(0.04)
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(0.04)
+        
+        ycounter = 0;
+        drawLayers = self.orderedLayers
+        
+        lstBoxX = self.layerListX
+        lstBoxY = self.layerListY - self.layerListItemH
+        lstBoxW = self.layerListItemW
+        lstBoxH = self.layerListItemH * len(drawLayers)
+        
+        while drawLayers != []:
+            currentNode = drawLayers[0]
+            drawLayers = drawLayers[1:]
+            
+            levelColor = (currentNode.level - 1) * 0.1
+            
+            rectX = self.layerListX + (currentNode.level - 1) * 15
+            rectY = self.layerListY + ycounter - self.layerListItemH
+            rectW = self.layerListItemW - (currentNode.level - 1) * 15
+            rectH = self.layerListItemH - 2
+            
+            cr.rectangle(lstBoxX, rectY, self.layerListItemW, self.layerListItemH - 2)
+            cr.set_source_rgb(1, 1, 1)
+            cr.fill()
+            
+            cr.rectangle(rectX, rectY, rectW, rectH)
+            
+            # hovering over layer list item
+            if (self.mouseX >= rectX and self.mouseX <= rectX + rectW and
+                self.mouseY >= rectY and self.mouseY <= rectY + rectH):
+                cr.set_source_rgb(1,0,0);
+                oldSelectedLayer = self.selectedLayer
+                self.selectedLayer = currentNode.shapeLayer
+                if (oldSelectedLayer != None):
+                    oldSelectedLayer.selectedShape = False
+                self.selectedLayer.selectedShape = True
+            # not hovering over anything in the box
+            elif (self.mouseX < lstBoxX or self.mouseX > lstBoxX + lstBoxW or
+                  self.mouseY < lstBoxY or self.mouseY > lstBoxY + lstBoxH):
+                if (self.selectedLayer != None):
+                    self.selectedLayer.selectedShape = False
+                self.selectedLayer = None
+                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
+            # hovering over another layer list item
+            else:
+                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
+            cr.fill()
+            
+            # layer text
+            cr.set_source_rgb(1,1,1)
+            cr.move_to(self.layerListX + 30 + (currentNode.level - 1) * 15, self.layerListY + ycounter - 10)
+            cr.show_text(currentNode.name)
             cr.stroke()
-            cr.move_to(550, 100 + ycounter)
+            cr.move_to(self.layerListX + self.layerListItemW - 30, self.layerListY + ycounter - 10)
             cr.show_text(str(currentNode.rank))
             cr.stroke()
-            ycounter += 20
+            ycounter += self.layerListItemH
             
         cr.set_source_rgb(1,1,1)
         cr.set_line_width(0.04)
         cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         cr.set_font_size(0.07)
         cr.move_to(20, 400)
-        cr.show_text("" + str(self.mouseX))
+        cr.show_text("" + str(self.mouseX) + ", " + str(self.mouseY))
         cr.stroke()
         
     def SetText(self, text):
