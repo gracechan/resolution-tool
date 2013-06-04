@@ -1,119 +1,14 @@
 import wx
 import wx.lib.wxcairo
 import cairo
-import math
-
-class BufferedCanvas(wx.Panel):
-    buffer = None
-    backbuffer = None
-    
-    def __init__(self, parent, ID=-1, pos=wx.DefaultPosition, size=wx.DefaultSize, style=wx.NO_FULL_REPAINT_ON_RESIZE):
-        wx.Panel.__init__(self, parent, ID, pos, size, style)
-        self.Bind(wx.EVT_PAINT, self.onPaint)
-        self.Bind(wx.EVT_SIZE, self.onSize)
-        
-        def disable_event(*pargs, **kwargs):
-            pass
-        self.Bind(wx.EVT_ERASE_BACKGROUND, disable_event)
-        self.onSize(None)
-        
-    def draw(self, dc):
-        # called when the canvas needs to be re-drawn
-        pass
-    
-    def flip(self):
-        # flips the front and back buffers
-        self.buffer, self.backbuffer = self.backbuffer, self.buffer
-        self.Refresh()
-    
-    def update(self):
-        # causes the canvas to be updated
-        dc = wx.MemoryDC()
-        dc.SelectObject(self.backbuffer)
-        dc.BeginDrawing()
-        self.draw(dc)
-        dc.EndDrawing()
-        self.flip()
-        
-    #event handlers
-    def onPaint(self, event):
-        #Blit the front buffer to the screen
-        dc = wx.BufferedPaintDC(self, self.buffer)
-        
-    def onSize(self, event):
-        # create a new off-screen buffer to hold the in-progress drawings on
-        width, height = self.GetClientSizeTuple()
-        if width == 0:
-            width = 1
-        if height == 0:
-            height = 1
-        self.buffer = wx.EmptyBitmap(width, height)
-        self.backbuffer = wx.EmptyBitmap(width, height)
-        # update the screen
-        self.update()
-
-# let rank = 0 and proportion = 0 essentially mean that the values are undefined
-class TreeNode:
-    def __init__(self, name, shape, rank=0, proportion=0):
-        self.name = name
-        self.shapeLayer = shape
-        self.parent = None
-        self.children = []
-        self.level = 1
-        self.rank = rank
-        self.proportion = proportion
-        
-    def addChild(self, node):
-        self.children += [node]
-        node.assignParent(self)
-        node.level = self.level + 1
-        
-    def assignParent(self, node):
-        self.parent = node
-
-class Shape:
-    def __init__(self, x, y, rgb):
-        self.x = x;
-        self.y = y;
-        self.rgb = rgb;
-        self.selectedShape = False;
-        
-    def paint(self, cpanel):
-        cpanel.set_source_rgb(1,0,0)
-        self.paintShape(cpanel)
-        
-        if (self.selectedShape):
-            cpanel.set_line_width(10)
-            cpanel.stroke_preserve();
-            
-        cpanel.set_source_rgb(self.rgb[0], self.rgb[1], self.rgb[2])
-        cpanel.fill()
-        
-    def paintShape(self, cpanel):
-        pass
-        
-class Rectangle(Shape):
-    def __init__(self, x, y, width, height, rgb):
-        self.width = width;
-        self.height = height;
-        Shape.__init__(self, x, y, rgb);
-        
-    def paintShape(self, cpanel):
-        cpanel.rectangle(self.x, self.y, self.width, self.height)
-        
-class Circle(Shape):
-    def __init__(self, x, y, radius, rgb):
-        self.radius = radius;
-        Shape.__init__(self, x, y, rgb);
-        
-    def paintShape(self, cpanel):
-        cpanel.arc(self.x, self.y, self.radius, 0, 2 * math.pi);
+from bufferedcanvas import BufferedCanvas
+from myshapes import Rectangle, Circle
+from datatree import TreeNode
         
 class MyFrame(wx.Frame):
     def __init__(self, parent, title, nodes, ID=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=wx.DEFAULT_FRAME_STYLE):
         wx.Frame.__init__(self, parent, ID, title, pos, size=(640, 480), style=style)
-        #self.canvas = CairoPanel(self, nodes)
         self.canvas = CairoPanel(self, nodes)
         self.Bind(wx.EVT_CLOSE, self.onClose)
         
@@ -129,22 +24,35 @@ class LayerListBox:
         self.lstH = h
         self.orderedLayers = []
         self.selectedLayer = None
+    
+    def changeLayer(self, mouseX, mouseY):
+        origY = self.lstY - self.lstH
+        deltaY = mouseY - origY
+        index = int(deltaY / self.lstH)
+        box = wx.TextEntryDialog(None, "Change rank of Layer '" + self.orderedLayers[index].name + "' to",
+                                 self.orderedLayers[index].name, str(self.orderedLayers[index].rank))
+        if (box.ShowModal()==wx.ID_OK):
+            answer = box.GetValue()
+            self.orderedLayers[index].rank = int(answer)
+        box.Destroy()
         
     def reorderLayersFromTreeRoot(self, root):
         childStack = [root]
-        levelStack = [1]
-        ycounter = 0;
-        
+
         while childStack != []:
             currentNode = childStack[0]
             childStack = childStack[1:]
             childStack = currentNode.children + childStack
-    
-            currentLevel = levelStack[0]
-            levelStack = levelStack[1:]
-            levelStack = [currentLevel + 1] * len(currentNode.children) + levelStack
-            
             self.orderedLayers += [currentNode]
+            
+    def checkMouseBounds(self, mouseX, mouseY):
+        rectX = self.lstX
+        rectY = self.lstY - self.lstH
+        rectW = self.lstW
+        rectH = (self.lstH * len(self.orderedLayers))
+            
+        return (mouseX >= rectX and mouseX <= rectX + rectW and
+                mouseY >= rectY and mouseY <= rectY + rectH)
             
     def paint(self, cr, mouseX, mouseY):
         cr.set_line_width(0.04)
@@ -163,7 +71,7 @@ class LayerListBox:
             currentNode = drawLayers[0]
             drawLayers = drawLayers[1:]
             
-            levelColor = (currentNode.level - 1) * 0.1
+            levelColor = (currentNode.level - 1) * 0.15
             
             rectX = self.lstX + (currentNode.level - 1) * 15
             rectY = self.lstY + ycounter - self.lstH
@@ -179,7 +87,7 @@ class LayerListBox:
             # hovering over layer list item
             if (mouseX >= rectX and mouseX <= rectX + rectW and
                 mouseY >= rectY and mouseY <= rectY + rectH):
-                cr.set_source_rgb(1,0,0);
+                cr.set_source_rgb(0,0,1);
                 if (self.selectedLayer != None):
                     self.selectedLayer.selectedShape = False
                 self.selectedLayer = currentNode.shapeLayer
@@ -188,14 +96,14 @@ class LayerListBox:
             # not hovering over anything in the box
             elif (mouseX < lstBoxX or mouseX > lstBoxX + lstBoxW or
                   mouseY < lstBoxY or mouseY > lstBoxY + lstBoxH):
-                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
+                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.1 + levelColor)
                 if (self.selectedLayer != None):
                     self.selectedLayer.selectedShape = False
                 self.selectedLayer = None
 
             # hovering over another layer list item
             else:
-                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.3 + levelColor)
+                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.1 + levelColor)
 
             cr.fill()
             
@@ -211,9 +119,8 @@ class LayerListBox:
         
 class CairoPanel(BufferedCanvas):
     def __init__(self, parent, nodes):
-        self.text = 'Hello World!'
         self.nodes = nodes
-        self.layerList = LayerListBox(360, 100, 250, 30)
+        self.layerList = LayerListBox(350, 130, 250, 30)
         self.mouseX = 0;
         self.mouseY = 0;
         
@@ -222,6 +129,12 @@ class CairoPanel(BufferedCanvas):
         
         BufferedCanvas.__init__(self, parent, -1)
         self.Bind(wx.EVT_MOTION, self.getCoords)
+        self.Bind(wx.EVT_LEFT_UP, self.mouseClicked)
+        
+    def mouseClicked(self, evt):
+        if (self.layerList.checkMouseBounds(self.mouseX, self.mouseY)):
+            self.layerList.changeLayer(self.mouseX, self.mouseY)
+            self.update()
         
     def getCoords(self, evt):
         self.mouseX = evt.GetX()
@@ -237,6 +150,11 @@ class CairoPanel(BufferedCanvas):
         # black background
         cr.rectangle(0, 0, width, height)
         cr.set_source_rgb(0, 0, 0)
+        cr.fill()
+        
+        # white canvas
+        cr.rectangle(30, 50, 280, 300)
+        cr.set_source_rgb(1, 1, 1)
         cr.fill()
         
         # draw the shape layers
@@ -261,12 +179,12 @@ class CairoPanel(BufferedCanvas):
         
 
 # START MAIN SCRIPT
-face = TreeNode("face", Rectangle(100, 100, 200, 200, (0.8, 0.2, 0.2)), 10)
-leftEyeWhite = TreeNode("left eye white", Rectangle(120, 120, 40, 60, (1, 1, 1)), 5)
-leftPupil = TreeNode("left pupil", Rectangle(130, 140, 20, 20, (0, 0, 0)), 8)
-nose = TreeNode("nose", Circle(200, 220, 20, (0.6, 0.6, 0.9)), 4)
-rightEyeWhite = TreeNode("right eye white", Rectangle(240, 120, 40, 60, (1, 1, 1)), 5)
-rightPupil = TreeNode("right pupil", Rectangle(250, 140, 20, 20, (0, 0, 0)), 8)
+face = TreeNode("Face", Rectangle(70, 100, 200, 200, (0.8, 0.2, 0.2)), 10)
+leftEyeWhite = TreeNode("Left Eye White", Rectangle(90, 120, 40, 60, (1, 1, 1)), 5)
+leftPupil = TreeNode("Left Pupil", Rectangle(100, 140, 20, 20, (0, 0, 0)), 8)
+nose = TreeNode("Nose", Circle(170, 220, 20, (0.6, 0.6, 0.9)), 4)
+rightEyeWhite = TreeNode("Right Eye White", Rectangle(210, 120, 40, 60, (1, 1, 1)), 5)
+rightPupil = TreeNode("Right Pupil", Rectangle(220, 140, 20, 20, (0, 0, 0)), 8)
 
 face.addChild(leftEyeWhite)
 face.addChild(rightEyeWhite)
