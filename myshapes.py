@@ -9,8 +9,12 @@ class Shape:
         self.downscale = 1;
         self.magnifyscale = 1;
         self.canvasPoint = canvasPoint
+        self.visible = True;
         
     def paint(self, cpanel):
+        if (self.visible == False):
+            return
+        
         cpanel.set_source_rgb(0,0,1)
         self.paintShape(cpanel)
         

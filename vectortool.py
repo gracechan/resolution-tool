@@ -65,7 +65,7 @@ class CairoPanel(BufferedCanvas):
             needToRescale = self.downScale.updateSlider(self.mouseX, self.mouseY)
             if (needToRescale):
                 for node in self.nodes:
-                    node.shapeLayer.changeDownScale(1.0 / self.downScale.getCurValue())
+                    node.downScale(1.0 / self.downScale.getCurValue())
         elif (self.magnifyScale.isMoving):
             needToRescale = self.magnifyScale.updateSlider(self.mouseX, self.mouseY)
             if (needToRescale):
@@ -154,7 +154,7 @@ leftPupil = TreeNode("Left Pupil", Rectangle(70, 90, 20, 20, (0, 0, 0), (canvasX
 nose = TreeNode("Nose", Circle(140, 170, 20, (0.6, 0.6, 0.9), (canvasX, canvasY)), 4)
 rightEyeWhite = TreeNode("Right Eye White", Rectangle(180, 70, 40, 60, (1, 1, 1), (canvasX, canvasY)), 5)
 rightPupil = TreeNode("Right Pupil", Rectangle(190, 90, 20, 20, (0, 0, 0), (canvasX, canvasY)), 8)
-mouth = TreeNode("Mouth", Rectangle(100, 220, 80, 1, (0, 0, 0), (canvasX, canvasY)), 53)
+mouth = TreeNode("Mouth", Rectangle(100, 220, 80, 1, (0, 0, 0), (canvasX, canvasY)), 2)
 
 face.addChild(leftEyeWhite)
 face.addChild(rightEyeWhite)

@@ -20,6 +20,7 @@ class LayerListBox:
         if (box.ShowModal()==wx.ID_OK):
             answer = box.GetValue()
             self.orderedLayers[index].rank = int(answer)
+            self.orderedLayers[index].updateNode()
         box.Destroy()
         
     def reorderLayersFromTreeRoot(self, root):
@@ -82,14 +83,20 @@ class LayerListBox:
             # not hovering over anything in the box
             elif (mouseX < lstBoxX or mouseX > lstBoxX + lstBoxW or
                   mouseY < lstBoxY or mouseY > lstBoxY + lstBoxH):
-                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.1 + levelColor)
+                if (currentNode.shapeLayer.visible == False):
+                    cr.set_source_rgb(0.3 + levelColor, 0, 0)
+                else:
+                    cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.1 + levelColor)
                 if (self.selectedLayer != None):
                     self.selectedLayer.selectedShape = False
                 self.selectedLayer = None
 
             # hovering over another layer list item
             else:
-                cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.1 + levelColor)
+                if (currentNode.shapeLayer.visible == False):
+                    cr.set_source_rgb(0.3 + levelColor, 0, 0)
+                else:
+                    cr.set_source_rgb(0 + levelColor, 0.1 + levelColor, 0.1 + levelColor)
 
             cr.fill()
             

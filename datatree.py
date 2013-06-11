@@ -16,3 +16,19 @@ class TreeNode:
         
     def assignParent(self, node):
         self.parent = node
+        
+    def updateNode(self):
+        downscale = self.shapeLayer.downscale
+        level = self.level
+        rank = self.rank
+        
+        value = rank * downscale / float(level)
+        
+        if (value < 1):
+            self.shapeLayer.visible = False
+        else:
+            self.shapeLayer.visible = True
+        
+    def downScale(self, newScale):
+        self.shapeLayer.changeDownScale(newScale)
+        self.updateNode()
